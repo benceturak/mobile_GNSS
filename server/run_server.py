@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+import asyncio
+import sys
 import socket               # Import socket module
 import _thread
 import time
@@ -7,7 +9,7 @@ import logging
 import threading
 
 #logging.basicConfig()
-logging.basicConfig(filename="/home/bence/test.log", level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename="d:/BME/_ur/2/proj/dump/test.log", level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def on_new_client(addr, dev):
     print("Connected:", addr)
@@ -64,14 +66,45 @@ def counter(clientsocket, addr):
 
 
          # Create a socket object
-host = "152.66.5.166" # Get local machine name
-port = 50000                # Reserve a port for your service.
-s = socket.create_server((host,port), family=socket.AF_INET)
-print('Server started!')
-print('Waiting for clients...')
-        # Bind to the port
-s.listen(5)                 # Now wait for client connection.
 
+
+run = True
+
+def listen():
+    try:
+        host = "192.168.0.45" # Get local machine name
+        port = 50000                # Reserve a port for your service.
+        s = socket.create_server((host,port), family=socket.AF_INET)
+        print('Server started!')
+        print('Waiting for clients...')
+        s.listen(5)
+
+        while run:
+            c, addr = s.accept()
+            dev = Device(c)
+            _thread.start_new_thread(on_new_client,(addr, dev))
+    except Exception as ex:
+        print("Server interrupted: ")
+        print(ex)
+
+async def main():
+    networkThread = asyncio.create_task(listen())
+    await networkThread
+
+'''
+    for cmd in sys.stdin:
+        if 'q' == cmd.rstrip():
+            run = False
+            print("Exit")
+            await networkThread
+            break
+        print("Unknown command: {}".format(cmd))
+'''
+
+listen()
+#asyncio.run(main())
+
+'''
 #print('Got connection from', addr)
 while True:
    c, addr = s.accept()     # Establish connection with client.
@@ -82,3 +115,4 @@ while True:
    #Edit: (c,addr)
    #that's how you pass arguments to functions when creating new threads using thread module.
 s.close()
+'''

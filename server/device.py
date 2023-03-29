@@ -2,12 +2,15 @@ import socket
 import queue
 import _thread
 import sys
-sys.path.append("/home/bence/data/UBXparser/src")
+sys.path.append("f:/git/UBXparser/src")
 from UBXparser import UBXparser
 import UBXmessage
 import logging
 from datetime import datetime
 import time
+
+basePath = "d:/BME/_ur/2/proj/dump/"
+
 class Device:
 
     def __init__(self, c):
@@ -70,6 +73,12 @@ class Device:
                 logging.info("Last message time" + str(self.lastMsgTime))
                 #self.c.send(b'received\r\n')
                 self.buffer.put(msg)
+                
+                if saveRaw:
+                    dt = datetime.utcnow()
+                    file_name = basePath + "RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
+                    with open(file_name, 'ab') as file:
+                        file.write(msg)
             except socket.timeout as err:
                 logging.error("DSGFSRGTHS")
                 logging.error(err)
@@ -79,11 +88,6 @@ class Device:
             
             
 
-            if saveRaw:
-                dt = datetime.utcnow()
-                file_name = "/home/bence/data/nmea_server/RAW/RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
-                with open(file_name, 'ab') as file:
-                    file.write(msg)
             
 
 
@@ -153,7 +157,7 @@ class Device:
 
                     if self.id == None:
                         continue
-                    file_name = "/home/bence/data/nmea_server/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
+                    file_name = basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
                     #print(file_name)
                     #print(len(buffer))
 

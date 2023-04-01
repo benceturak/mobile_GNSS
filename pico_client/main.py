@@ -86,8 +86,6 @@ async def ublox2queue_sim():
         await q.put(msg)
         msgId += 1
         await asyncio.sleep(0.2)
-
-    
         
 async def queue2tcp(wifi):
     global run
@@ -115,7 +113,7 @@ async def queue2tcp(wifi):
                     #logging.warning("Queue timeout! Queue is empty!")
                 #logging.info("GET FROM QUEUE")
 
-                binLen = len(bin) 
+                binLen = len(bin)
                 lastMsgEnd = 0 
             
                 if binLen < 6:
@@ -147,7 +145,7 @@ async def queue2tcp(wifi):
                         #logging.warning(len(msg))
 
                         continue
-                    #print("OK")
+                    print("Valid msg in queue, sending via TCP...")
                 
                     try:
                         tcpWriter.write(msg)
@@ -218,24 +216,22 @@ async def startNtrip(wifi):
             print("Ntrip error")
             print(err)
 
-
-        
-
 async def connectWifi(wlan):
     global run
     while run:
         if not wlan.isconnected():
-            print("Connect to wifi...")
+            print("Connecting to WiFi...")
             wlan.connect(wifi_config.wireless["SSID"], wifi_config.wireless["PW"])
-
-            while not wlan.isconnected():pass
-            print("Wifi connected!")
-            
-            await asyncio.sleep(1)
-    
-        await asyncio.sleep(2)
-    
-        
+            while not wlan.isconnected():
+                if not run:
+                    break
+                await asyncio.sleep(1)
+                print("Still connecting to WiFi...")
+            if wlan.isconnected():
+                print("Wifi connected!")
+                await asyncio.sleep(1)
+            else:
+                print("WiFi connection interrupted")
 
 async def main():
     global run
@@ -254,7 +250,6 @@ async def main():
     
     print(3)
     
-    
     #machine.reset()
     '''
     for cmd in sys.stdin:
@@ -268,26 +263,12 @@ async def main():
         print("Unknown command: {}".format(cmd))
 
     '''
-    while True:
-        #WDT_tcp.feed()
-        await asyncio.sleep(1)
+    try:
+        while True:
+            #WDT_tcp.feed()
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        print("Ctrl+C, Stopping client...")
+        run = False
 
 asyncio.run(main())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

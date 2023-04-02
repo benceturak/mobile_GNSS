@@ -2,14 +2,17 @@
 import asyncio
 import sys
 import socket               # Import socket module
+import signal
 import _thread
 import time
 from device import Device
+import config
 import logging
 import threading
 
 #logging.basicConfig()
-logging.basicConfig(filename="d:/BME/_ur/2/proj/dump/test.log", level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logFile = config.basePath + "test.log"
+logging.basicConfig(filename=logFile, level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def on_new_client(addr, dev):
     print("Connected:", addr)
@@ -70,17 +73,18 @@ def counter(clientsocket, addr):
 
 run = True
 
-def listen():
+async def listen():
     try:
-        host = "192.168.0.45" # Get local machine name
-        port = 50000                # Reserve a port for your service.
-        s = socket.create_server((host,port), family=socket.AF_INET)
+        s = socket.create_server((config.server["IP"], config.server["port"]), family=socket.AF_INET)
         print('Server started!')
         print('Waiting for clients...')
         s.listen(5)
+        
 
         while run:
             c, addr = s.accept()
+            # send useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
+            c.send(b'OK')
             dev = Device(c)
             _thread.start_new_thread(on_new_client,(addr, dev))
     except Exception as ex:
@@ -101,7 +105,15 @@ async def main():
         print("Unknown command: {}".format(cmd))
 '''
 
-listen()
+def sigintHandler():
+    global run
+    print("SIGINT, Stopping client...")
+    run = False
+
+signal.signal(signal.SIGINT, sigintHandler)
+
+#listen()
+asyncio.run(listen())
 #asyncio.run(main())
 
 '''

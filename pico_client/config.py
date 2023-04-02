@@ -1,0 +1,12 @@
+wireless = {
+    "SSID": "EzenSincsNet",
+    "PW": "Intelligensf1ngomvan"
+    }
+server = {
+    "IP": "192.168.0.45",
+    "port": 50000
+}
+ntrip = {
+    "IP": "",
+    "port": 2101
+}

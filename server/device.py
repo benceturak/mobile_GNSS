@@ -7,9 +7,8 @@ from UBXparser import UBXparser
 import UBXmessage
 import logging
 from datetime import datetime
+import config
 import time
-
-basePath = "d:/BME/_ur/2/proj/dump/"
 
 class Device:
 
@@ -55,8 +54,6 @@ class Device:
 
         logging.warning("Timeout on TCP stream! Device shuts down")
 
-
-
     def getMsg(self, saveRaw=False):
 
         while True:
@@ -76,7 +73,7 @@ class Device:
                 
                 if saveRaw:
                     dt = datetime.utcnow()
-                    file_name = basePath + "RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
+                    file_name = config.basePath + "RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
                     with open(file_name, 'ab') as file:
                         file.write(msg)
             except socket.timeout as err:
@@ -85,13 +82,9 @@ class Device:
             except Exception as err:
                 logging.error("ERRRRROROORRORORR")
                 logging.error(err)
-            
-            
-
-            
-
 
         return False
+    
     def close(self):
         logging.info("Shut device")
         #self.ntripSocket.close()
@@ -117,9 +110,6 @@ class Device:
                 break
 
         return False
-
-    
-            
 
     def startParser(self):
         file_name = None
@@ -157,7 +147,7 @@ class Device:
 
                     if self.id == None:
                         continue
-                    file_name = basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
+                    file_name = config.basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
                     #print(file_name)
                     #print(len(buffer))
 

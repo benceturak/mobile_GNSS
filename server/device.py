@@ -1,12 +1,13 @@
+import sys
+import os
+# put UBXParser root next to mobile_GNSS root for this to work
+sys.path.append(os.path.dirname(sys.path[0]))
+from common import config
+sys.path.append(os.path.join(config.importRoot, 'UBXParser', 'src'))
+from UBXparser import UBXparser
 import socket
 import queue
 import _thread
-import sys
-import os
-import config
-# put UBXParser root next to mobile_GNSS root for this to work
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(sys.path[0])), 'UBXParser', 'src'))
-from UBXparser import UBXparser
 import UBXmessage
 import logging
 from datetime import datetime

@@ -1,7 +1,7 @@
 import uasyncio as asyncio
 import machine
 import network
-from pico_client import config
+from common import config
 from pico_client import http
 from pico_client import queue
 import socket

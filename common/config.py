@@ -10,3 +10,5 @@ ntrip = {
     "IP": "",
     "port": 2101
 }
+importRoot = "d:/BME/_ur/2/proj"
+basePath = "d:/BME/_ur/2/proj/dump/"

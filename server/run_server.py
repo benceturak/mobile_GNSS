@@ -1,12 +1,13 @@
-#!/usr/bin/python3
-import asyncio
 import sys
-import socket               # Import socket module
+import os
+sys.path.append(os.path.dirname(sys.path[0]))
+from common import config
+import socket
+import asyncio
 import signal
 import _thread
 import time
 from device import Device
-import config
 import logging
 import threading
 

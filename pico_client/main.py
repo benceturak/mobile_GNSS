@@ -2,13 +2,13 @@ import uasyncio as asyncio
 import machine
 import network
 from common import config
+from common import util
 from pico_client import http
 from pico_client import queue
 import socket
 import time
 import sys
-#uart = UART(4, 9600, timeout=0)  # timeout=0 prevents blocking at low baudrates
-uart = machine.UART(1, baudrate=4800, bits=8, parity=None, tx=machine.Pin(8), rx=machine.Pin(9))
+uart = machine.UART(1, baudrate=config.uartBaudRate, bits=8, parity=None, tx=machine.Pin(8), rx=machine.Pin(9))
 #q = queue.Queue()
 #parser = ubxparser.UBXParser(q)
 ID = "TES1"
@@ -25,26 +25,11 @@ WDT_tcp = machine.WDT(timeout=8000)
 sreader = asyncio.StreamReader(uart)
 swriter = asyncio.StreamWriter(uart, {})
 
-maxRetryCnt = 3
 run = True
-
-def checksum(msg):
-    cs_a = 0
-    cs_b = 0
-
-    for b in msg:
-        cs_a = (cs_a + b)%256
-        cs_b = (cs_b + cs_a)%256
-
-    return ((cs_b << 8) | cs_a).to_bytes(2,'little')
 
 def identifycation(ID):
     msg = b"\xb5\x62\xCA\x01\x04\x00" + ID.encode("ascii")
-    return msg + checksum(msg[2:])
-
-def bytesToHexStr(b):
-    str = b.hex()
-    return ' '.join(str[i:i+2] for i in range(0, len(str), 2))
+    return msg + util.checksum(msg[2:])
 
 async def rtcm2ublox(tcpReader):
     #print("AAAAAAAAAAA")
@@ -80,7 +65,7 @@ async def ublox2queue_sim():
     vAcc = (0).to_bytes(4, 'little')
     msgPayload = iTOW + lon + lat + height + hMSL + hAcc + vAcc
 
-    msgChecksum = checksum(msgHeader + msgPayload)
+    msgChecksum = util.checksum(msgHeader + msgPayload)
 
     msg = msgPream + msgHeader + msgPayload + msgChecksum
     msgId = 0
@@ -98,26 +83,39 @@ async def queue2tcp(wifi):
     WDT_tcp.feed()
     bin = b''
     retryCnt = 0
-    while run and retryCnt < maxRetryCnt:
+    while run and retryCnt < config.maxTcpConnectionAttempts:
         try:
             while run and not wifi.isconnected():
                 await asyncio.sleep(1)
 
-            print("Trying to connect to server...")
-            tcpReader, tcpWriter = await asyncio.open_connection(config.server["IP"], config.server["port"])
-            print("Awaiting TCP handshake...")
-
-            # useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
-            ack = await tcpReader.read(2)
-            if ack == b'OK':
-                print("TCP connection is up, streaming...")
-            else:
-                print("TCP connection is up, but server handshake with invalid!")
-
-            id_msg = identifycation(ID)
-            tcpWriter.write(id_msg)
+            failedMsgCnt = 0
+            connected = False
             
-            while True:
+            while run:
+
+                if not wifi.isconnected():
+                    if connected:
+                        print("WiFi connection lost while TCP channel was active")
+                        connected = False
+                    await asyncio.sleep(1)
+                    continue
+                
+                if not connected:
+                    print("Trying to connect to server...")
+                    tcpReader, tcpWriter = await asyncio.open_connection(config.server["IP"], config.server["port"])
+                    print("Awaiting TCP handshake...")
+
+                    # useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
+                    ack = await tcpReader.read(2)
+                    if ack == b'OK':
+                        print("TCP connection is up, streaming...")
+                    else:
+                        print("TCP connection is up, but server handshake with invalid!")
+
+                    id_msg = identifycation(ID)
+                    tcpWriter.write(id_msg)
+                    connected = True
+
                 try:
                     #bin += q.get_nowait()
                     bin += await q.get()
@@ -138,7 +136,7 @@ async def queue2tcp(wifi):
 
                 # DEBUG
                 #print("Buffer length = " + str(binLen))
-                #print(bytesToHexStr(bin))
+                #print(util.bytesToHexStr(bin))
 
                 for i in range(0, binLen):
 
@@ -158,8 +156,8 @@ async def queue2tcp(wifi):
                     msg = bin[startIndex:endIndex]
                     cs = msg[6+msgLen:6+msgLen+2]
 
-                    if cs != checksum(msg[2:6+msgLen]):
-                        print("Invalid checksum: {} instead of {}".format(msg[msgLen-2:msgLen], checksum(msg[2:6+msgLen])))
+                    if cs != util.checksum(msg[2:6+msgLen]):
+                        print("Invalid checksum: {} instead of {}".format(util.bytesToHexStr(msg[msgLen-2:msgLen]), util.bytesToHexStr(util.checksum(msg[2:6+msgLen]))))
                         #continue
 
                     #print("Sending message via TCP...")
@@ -174,6 +172,10 @@ async def queue2tcp(wifi):
                         lastMsgEnd = endIndex
                     except Exception as err:
                         print("Sending TCP packet unsuccessful: " + str(err))
+                        failedMsgCnt += 1
+                        if failedMsgCnt >= config.maxFailedMsgCnt:
+                            print("TCP connection is assumed down, reconnecting...")
+                            connected = False
             
                 # trim buffer
                 bin = bin[lastMsgEnd:]
@@ -244,8 +246,6 @@ async def main():
 
     q2t = asyncio.create_task(queue2tcp(wlan))
     #chkTCP = asyncio.create_task(checkTcp(wlan))
-    
-    print(3)
     
     #machine.reset()
     '''

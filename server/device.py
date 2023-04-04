@@ -2,13 +2,16 @@ import sys
 import os
 # put UBXParser root next to mobile_GNSS root for this to work
 sys.path.append(os.path.dirname(sys.path[0]))
+from common import util
 from common import config
-sys.path.append(os.path.join(config.importRoot, 'UBXParser', 'src'))
+sys.path.append(os.path.join(config.importRoot, 'UBXparser', 'src'))
+#sys.path.append(config.importRoot)
+#from UBXParser.src import UBXParser
 from UBXparser import UBXparser
+import UBXmessage
 import socket
 import queue
 import _thread
-import UBXmessage
 import logging
 from datetime import datetime
 
@@ -49,8 +52,7 @@ class Device:
 
     def msgTimeout(self, timeout=10):
         while True:
-
-            logging.info(datetime.timestamp(datetime.now()) - self.lastMsgTime)
+            logging.debug("DevTo HeartBeat")
             if (datetime.timestamp(datetime.now()) - self.lastMsgTime) > timeout:
                 self.shutdown.set()
                 break
@@ -64,15 +66,14 @@ class Device:
             if self.shutdown.is_set():
                 break
             try:
-                logging.info("RECV")
+                logging.debug("RECV")
                 msg = self.c.recv(6000)
-                logging.info("AAAAAAAAAAAAAAa")
-                logging.info(len(msg))
+                
                 if len(msg) == 0:
                     continue
+
                 self.lastMsgTime = datetime.timestamp(datetime.now())
-                logging.info("Last message time" + str(self.lastMsgTime))
-                #self.c.send(b'received\r\n')
+                logging.debug("Received {} bytes".format(len(msg)))
                 self.buffer.put(msg)
                 
                 if saveRaw:

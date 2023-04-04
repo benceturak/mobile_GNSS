@@ -12,3 +12,6 @@ ntrip = {
 }
 importRoot = "d:/BME/_ur/2/proj"
 basePath = "d:/BME/_ur/2/proj/dump/"
+maxTcpConnectionAttempts = 5
+maxFailedMsgCnt = 5
+uartBaudRate = 4800

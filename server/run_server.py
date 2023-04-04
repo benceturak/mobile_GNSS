@@ -11,9 +11,10 @@ from device import Device
 import logging
 import threading
 
-#logging.basicConfig()
 logFile = config.basePath + "test.log"
-logging.basicConfig(filename=logFile, level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename=logFile, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# display log in stdout as well
+logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
 def on_new_client(addr, dev):
     print("Connected:", addr)
@@ -32,9 +33,6 @@ def on_new_client(addr, dev):
 
     if dev.identify():
         dev.startParser()
-
-   
-    
 
     dev.close()
     logging.info("STOP1")
@@ -80,13 +78,14 @@ async def listen():
         print('Server started!')
         print('Waiting for clients...')
         s.listen(5)
-        
 
         while run:
             c, addr = s.accept()
+            print("Incoming connection, sending ACK...")
             # send useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
             c.send(b'OK')
             dev = Device(c)
+            print("New client connected successfully, starting message loop...")
             _thread.start_new_thread(on_new_client,(addr, dev))
     except Exception as ex:
         print("Server interrupted: ")

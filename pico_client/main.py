@@ -2,6 +2,7 @@ import uasyncio as asyncio
 import machine
 import network
 from common import config
+from common import localconfig
 from common import util
 from pico_client import http
 from pico_client import queue
@@ -39,8 +40,9 @@ async def rtcm2ublox(tcpReader):
     await swriter.drain()  # Transmission starts now.
     
 async def ublox2queue():
+    global run
     print("Listening on UART...")
-    while True:
+    while run:
         res = await sreader.read(10000)
         WDT_tcp.feed()
         #print("Read {} bytes from UART".format(len(res)))
@@ -102,7 +104,7 @@ async def queue2tcp(wifi):
                 
                 if not connected:
                     print("Trying to connect to server...")
-                    tcpReader, tcpWriter = await asyncio.open_connection(config.server["IP"], config.server["port"])
+                    tcpReader, tcpWriter = await asyncio.open_connection(localconfig.server["IP"], localconfig.server["port"])
                     print("Awaiting TCP handshake...")
 
                     # useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
@@ -187,6 +189,7 @@ async def queue2tcp(wifi):
             await asyncio.sleep(1)
 
     print("End of tries, go kill myself")
+    run = False
 
 async def startNtrip(wifi):
     global run
@@ -215,8 +218,8 @@ async def connectWifi(wlan):
     global run
     while run:
         if not wlan.isconnected():
-            print("Connecting to WiFi...")
-            wlan.connect(config.wireless["SSID"], config.wireless["PW"])
+            print("Connecting to WiFi: {}...".format(localconfig.wireless["SSID"]))
+            wlan.connect(localconfig.wireless["SSID"], localconfig.wireless["PW"])
             while not wlan.isconnected():
                 if not run:
                     break

@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from common import config
+from common import localconfig
 import socket
 import asyncio
 import signal
@@ -11,7 +12,7 @@ from device import Device
 import logging
 import threading
 
-logFile = config.basePath + "test.log"
+logFile = localconfig.basePath + "test.log"
 logging.basicConfig(filename=logFile, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # display log in stdout as well
 logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
@@ -74,7 +75,7 @@ run = True
 
 async def listen():
     try:
-        s = socket.create_server((config.server["IP"], config.server["port"]), family=socket.AF_INET)
+        s = socket.create_server((localconfig.server["IP"], localconfig.server["port"]), family=socket.AF_INET)
         print('Server started!')
         print('Waiting for clients...')
         s.listen(5)

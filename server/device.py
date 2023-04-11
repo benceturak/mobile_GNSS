@@ -4,8 +4,9 @@ import os
 sys.path.append(os.path.dirname(sys.path[0]))
 from common import util
 from common import config
-sys.path.append(os.path.join(config.importRoot, 'UBXparser', 'src'))
-#sys.path.append(config.importRoot)
+from common import localconfig
+sys.path.append(os.path.join(localconfig.importRoot, 'UBXparser', 'src'))
+#sys.path.append(localconfig.importRoot)
 #from UBXParser.src import UBXParser
 from UBXparser import UBXparser
 import UBXmessage
@@ -78,12 +79,11 @@ class Device:
                 
                 if saveRaw:
                     dt = datetime.utcnow()
-                    file_name = config.basePath + "RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
+                    file_name = localconfig.basePath + "RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
                     with open(file_name, 'ab') as file:
                         file.write(msg)
             except socket.timeout as err:
-                logging.error("DSGFSRGTHS")
-                logging.error(err)
+                logging.error("Socket timed out: " + err)
             except Exception as err:
                 logging.error("ERRRRROROORRORORR")
                 logging.error(err)
@@ -152,7 +152,7 @@ class Device:
 
                     if self.id == None:
                         continue
-                    file_name = config.basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
+                    file_name = localconfig.basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
                     #print(file_name)
                     #print(len(buffer))
 

@@ -20,40 +20,27 @@ logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 def on_new_client(addr, dev):
     print("Connected:", addr)
     logging.info("Connected:" + str(addr))
-    #dev.startNtripProxy()
-    #dev.identify()
 
     shutDevice = threading.Event()
     dev.addShutdownEvent(shutDevice)
     stream2queue = threading.Thread(target=dev.getMsg, args=(True, ))
     stream2queue.start()
-    msgTimeout = threading.Thread(target=dev.msgTimeout, args=(8, ))
+    msgTimeout = threading.Thread(target=dev.msgTimeout, args=(config.tcpTimeout, ))
     msgTimeout.start()
-    #_thread.start_new_thread(dev.getMsg, (False,))
-    #_thread.start_new_thread(dev.startParser,())
 
     if dev.identify():
         dev.startParser()
 
+    logging.info("Shutting down TCP client handler...")
     dev.close()
-    logging.info("STOP1")
 
+    logging.info("Shutting down buffer queue...")
     stream2queue.join()
-    logging.info("STOP2")
-    msgTimeout.join()
+    
+    #logging.info("Shutting down TCP watchdog...")
+    #msgTimeout.join()
 
-    logging.info("CLOSE")
-    #while True:
-
-        #if dev.getMsg(True) == 0:
-            #break
-        #msg = clientsocket.recv(1024)
-        
-
-        #do some checks and if msg == someWeirdSignal: break:
-        #print(msg)
-        #clientsocket.sendall(bytes(str(num), 'utf-8'))
-    #clientsocket.
+    logging.info("TCP client handler cleaned up successfully")
 
 def counter(clientsocket, addr):
     print("Connected:", addr)
@@ -75,19 +62,24 @@ run = True
 
 async def listen():
     try:
-        s = socket.create_server((localconfig.server["IP"], localconfig.server["port"]), family=socket.AF_INET)
+        serv = socket.create_server((localconfig.server["IP"], localconfig.server["port"]), family=socket.AF_INET)
+        serv.settimeout(1)
         print('Server started!')
         print('Waiting for clients...')
-        s.listen(5)
+        serv.listen(5)
 
         while run:
-            c, addr = s.accept()
-            print("Incoming connection, sending ACK...")
-            # send useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
-            c.send(b'OK')
-            dev = Device(c)
-            print("New client connected successfully, starting message loop...")
-            _thread.start_new_thread(on_new_client,(addr, dev))
+            try:
+                sock, addr = serv.accept()
+                print("Incoming connection, sending ACK...")
+                # send useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
+                sock.send(b'OK')
+                dev = Device(sock)
+                print("New client connected successfully, starting message loop...")
+                _thread.start_new_thread(on_new_client,(addr, dev))
+            except socket.timeout:
+                await asyncio.sleep(0)
+                continue
     except Exception as ex:
         print("Server interrupted: ")
         print(ex)
@@ -96,36 +88,11 @@ async def main():
     networkThread = asyncio.create_task(listen())
     await networkThread
 
-'''
-    for cmd in sys.stdin:
-        if 'q' == cmd.rstrip():
-            run = False
-            print("Exit")
-            await networkThread
-            break
-        print("Unknown command: {}".format(cmd))
-'''
-
-def sigintHandler():
+def sigintHandler(signal, frame):
     global run
-    print("SIGINT, Stopping client...")
+    print("SIGINT, Stopping server...")
     run = False
 
 signal.signal(signal.SIGINT, sigintHandler)
 
-#listen()
 asyncio.run(listen())
-#asyncio.run(main())
-
-'''
-#print('Got connection from', addr)
-while True:
-   c, addr = s.accept()     # Establish connection with client.
-   dev = Device(c)
-   _thread.start_new_thread(on_new_client,(addr, dev))
-   #_thread.start_new_thread(counter, (1111,2222))
-   #Note it's (addr,) not (addr) because second parameter is a tuple
-   #Edit: (c,addr)
-   #that's how you pass arguments to functions when creating new threads using thread module.
-s.close()
-'''

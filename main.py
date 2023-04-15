@@ -18,24 +18,39 @@ status_wifi=0
 status_tcp=0
 pream = b'\xb5\x62'
 
+powerLed = machine.Pin(config.ledPin1, machine.Pin.OUT)
+wifiLed = machine.Pin(config.ledPin2, machine.Pin.OUT)
+tcpLed = machine.Pin(config.ledPin3, machine.Pin.OUT)
+wifiLed.low()
+tcpLed.low()
+powerLed.high()
+
+time.sleep(3)
+powerLed.low()
+
 q = queue.Queue()
 
-WDT_tcp = machine.WDT(timeout=8000)
+#WDT_tcp = machine.WDT(timeout=8000)
 #WDT_ntrip = machine.WDT(timeout=8000)
 
 sreader = asyncio.StreamReader(uart)
 swriter = asyncio.StreamWriter(uart, {})
 
 run = True
+ntripConnected = False
 
 def identifycation(ID):
     msg = b"\xb5\x62\xCA\x01\x04\x00" + ID.encode("ascii")
     return msg + util.checksum(msg[2:])
 
 async def rtcm2ublox(tcpReader):
-    #print("AAAAAAAAAAA")
+    global ntripConnected
+
     data = await tcpReader.read(5000)
-    #print(data)
+    if not ntripConnected and len(data) > 0:
+        print("NTRIP connection is UP")
+        ntripConnected = True
+
     swriter.write(data)
     await swriter.drain()  # Transmission starts now.
     
@@ -44,7 +59,7 @@ async def ublox2queue():
     print("Listening on UART...")
     while run:
         res = await sreader.read(10000)
-        WDT_tcp.feed()
+        #WDT_tcp.feed()
         #print("Read {} bytes from UART".format(len(res)))
         await q.put(res)
 
@@ -82,52 +97,109 @@ async def ublox2queue_sim():
         
 async def queue2tcp(wifi):
     global run
-    WDT_tcp.feed()
+    #WDT_tcp.feed()
     bin = b''
     retryCnt = 0
-    while run and retryCnt < config.maxTcpConnectionAttempts:
+    failedMsgCnt = 0
+    connected = False
+    while run:
         try:
-            while run and not wifi.isconnected():
-                await asyncio.sleep(1)
-
-            failedMsgCnt = 0
-            connected = False
-            
             while run:
-
+                # check WiFi
                 if not wifi.isconnected():
+                    wifiLed.low()
                     if connected:
                         print("WiFi connection lost while TCP channel was active")
                         connected = False
                     await asyncio.sleep(1)
                     continue
+                else:
+                    wifiLed.high()
                 
+                # check TCP
                 if not connected:
-                    print("Trying to connect to server...")
-                    tcpReader, tcpWriter = await asyncio.open_connection(localconfig.server["IP"], localconfig.server["port"])
-                    print("Awaiting TCP handshake...")
+                    tcpLed.low()
+                    print("WiFi connection is UP, establishing TCP connection...")
+                    while run:
+                        try:
+                            tcpReader, tcpWriter = await asyncio.open_connection(localconfig.server["IP"], localconfig.server["port"])
+                            break
+                        except Exception as err:
+                            retryCnt += 1
+                            retryDelay = config.tcpRetryDelay / 1000
+                            print("TCP error on try #{}, retrying in {}s...".format(retryCnt, retryDelay))
+                            print(err)
+                            await asyncio.sleep(retryDelay)
+                            continue
+                    
+                    print("TCP channel established, awaiting TCP handshake...")
 
-                    # useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
-                    ack = await tcpReader.read(2)
-                    if ack == b'OK':
-                        print("TCP connection is up, streaming...")
-                    else:
-                        print("TCP connection is up, but server handshake with invalid!")
+                    while run and not connected:
+                        try:
+                            ack = await asyncio.wait_for(tcpReader.read(2), timeout=1)
+                            if ack == b'OK':
+                                print("TCP handshake completed, connection is UP")
+                                retryCnt = 0
+                                id_msg = identifycation(ID)
+                                tcpWriter.write(id_msg)
+                                tcpWriter.drain()
+                                connected = True
+                            else:
+                                print("TCP channel is up, but server handshake was invalid")
+                                tcpReader.close()
+                                tcpWriter.close()
+                                await tcpReader.wait_closed()
+                                await tcpWriter.wait_closed()
+                        except asyncio.TimeoutError:
+                            print("Still awaiting TCP handshake...")
+                            continue
+                        except Exception as err:
+                            print("Exception while writing TCP:")
+                            print(err)
+                            break
+                else:
+                    tcpLed.high()
 
-                    id_msg = identifycation(ID)
-                    tcpWriter.write(id_msg)
-                    connected = True
-
+                # detect connection loss
                 try:
-                    #bin += q.get_nowait()
-                    bin += await q.get()
+                    await asyncio.wait_for(tcpReader.read(2), timeout=0.1)
+                except asyncio.TimeoutError:
+                    pass
+                except OSError as err:
+                    if err.errno == 104 or err.errno == 103: # ECONNRESET || ECONNABORTED
+                        print("TCP connection lost, reconnecting...")
+                        connected = False
+
+                        tcpReader.close()
+                        tcpWriter.close()
+                        await tcpReader.wait_closed()
+                        await tcpWriter.wait_closed()
+                        continue
+                    else:
+                        print("Unexpected TCP OS error while checking connection:")
+                        print(err)
+                        continue
+                except Exception as err:
+                    print("Exception while checking TCP link:")
+                    print(err)
+                    continue
+
+                # === END OF CONNECTION HANDLING ===
+                
+                # do the real work
+                try:
+                    bin += await asyncio.wait_for(q.get(), timeout=1)
                 except queue.QueueEmpty:
                     print("Queue empty")
                     await asyncio.sleep(0)
-                    pass
+                    continue
+                except asyncio.TimeoutError:
+                    # No data, yield and look for termination signal
+                    await asyncio.sleep(0)
+                    continue
                 except Exception as err:
                     print("Error while reading queue: " + str(err))
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0)
                     continue
 
                 binLen = len(bin)
@@ -169,7 +241,7 @@ async def queue2tcp(wifi):
                         await tcpWriter.drain()
                         #print("Send successful")
                         
-                        WDT_tcp.feed()
+                        #WDT_tcp.feed()
 
                         lastMsgEnd = endIndex
                     except Exception as err:
@@ -183,36 +255,35 @@ async def queue2tcp(wifi):
                 bin = bin[lastMsgEnd:]
 
         except Exception as err:
-            retryCnt += 1
-            print("TCP error on try #{}, retrying in 1s...".format(retryCnt))
+            print("Unhandled exception in message queue:")
             print(err)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0)
 
-    print("End of tries, go kill myself")
-    run = False
+    print("Go kill myself")
 
 async def startNtrip(wifi):
     global run
     while run:
         try:
-            print(0)
             while not wifi.isconnected():
                 await asyncio.sleep(1)
-            print(1)
+
+            print("Connecting to NTRIP...")
             
             client = http.HTTP(config.ntrip["IP"], config.ntrip["port"])
             client.addParam("User-Agent", "NTRIP-agent")
-            client.addParam("Authorization", "Authorization")
-
+            client.addParam("Authorization", config.ntrip["auth"])
             
             await client.ntrip("BUTE0", rtcm2ublox)
+
+            print("NTRIP connection terminated")
             
             await asyncio.sleep(1)
         except Exception as err:
             print("Ntrip error")
             print(err)
 
-    await asyncio.sleep(5) # asyncio is not preemtive, so yield()
+    await asyncio.sleep(0) # asyncio is not preemtive, so yield()
 
 async def connectWifi(wlan):
     global run
@@ -220,14 +291,17 @@ async def connectWifi(wlan):
         if not wlan.isconnected():
             print("Connecting to WiFi: {}...".format(localconfig.wireless["SSID"]))
             wlan.connect(localconfig.wireless["SSID"], localconfig.wireless["PW"])
-            while not wlan.isconnected():
+            retryCnt = 0
+            while not wlan.isconnected() and retryCnt < config.wifiReconnectTimeout:
                 if not run:
                     break
                 await asyncio.sleep(1)
-                WDT_tcp.feed()
+                #WDT_tcp.feed()
                 print("Still connecting to WiFi...")
+                retryCnt += 1
             if wlan.isconnected():
                 print("Wifi connected!")
+                retryCnt = 0
                 await asyncio.sleep(1)
             else:
                 print("WiFi connection interrupted")
@@ -241,7 +315,7 @@ async def main():
     wlan.active(True)
     wifi = asyncio.create_task(connectWifi(wlan))
 
-    #ntrip = asyncio.create_task(startNtrip(wlan))
+    ntrip = asyncio.create_task(startNtrip(wlan))
     #stream = asyncio.create_task(ublox2tcp(wlan))
 
     stream = asyncio.create_task(ublox2queue())

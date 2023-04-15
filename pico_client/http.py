@@ -15,20 +15,20 @@ class HTTP:
         pass
         
     async def _open(self):
-        print("OPEN SOCKET")
+        #print("OPEN SOCKET")
         self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
 
         #self.soc = socket.socket()
         #self.soc.connect((self.host, self.port))
     
     async def _close(self):
-        print("CLOSE SOCKET")
+        #print("CLOSE SOCKET")
         await self.writer.close()
         await self.reader.close()
     def addParam(self, param, val):
         self.params.append((param, val))
         
-    def get(self, file=""):
+    async def get(self, file=""):
         await self._open()
         msg = "GET /{:s} HTTP/1.0\r\nHost: {:s}\r\n".format(file, self.host)
         
@@ -55,7 +55,7 @@ class HTTP:
             msg += p[0] + ": " + p[1] + "\r\n"
         
         msg += "\r\n"
-        print(msg)
+        #print(msg)
         self.writer.write(bytes(msg, "utf8"))
         await self.writer.drain()
         resp = await self.readStream(func)

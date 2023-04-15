@@ -14,20 +14,18 @@ import socket
 import queue
 import _thread
 import logging
+import datetime
 from datetime import datetime
 
 import time
 
 class Device:
 
-    def __init__(self, c):
+    def __init__(self, sock):
         self.id = None
         self.identifyStatus = 0
-        #self.ntrip = {"ip": "152.66.5.152", "port": 2101, "get": "GET /BUTE0 HTTP/1.0\r\nHost: 152.66.5.152\r\nUser-Agent: NTRIP-agent\r\nAuthorization: Basic dHVyYWs6N1E3eWtzQ3c=\r\n\r\n"}
-        #self.ntripSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.c = c
-        self.c.settimeout(4)
-        #self.c.settimeout(5)
+        self.sock = sock
+        self.sock.settimeout(4)
         self.logger = None
 
 
@@ -49,26 +47,22 @@ class Device:
     def sendNtrip(self):
         while True:
 
-            self.c.sendall(self.ntripSocket.recv(1024))
+            self.sock.sendall(self.ntripSocket.recv(1024))
 
     def msgTimeout(self, timeout=10):
         while True:
-            logging.debug("DevTo HeartBeat")
             if (datetime.timestamp(datetime.now()) - self.lastMsgTime) > timeout:
+                logging.warning("Timeout on TCP stream! Device shuts down")
                 self.shutdown.set()
                 break
             time.sleep(1)
 
-        logging.warning("Timeout on TCP stream! Device shuts down")
-
     def getMsg(self, saveRaw=False):
 
-        while True:
-            if self.shutdown.is_set():
-                break
+        while not self.shutdown.is_set():
             try:
                 logging.debug("RECV")
-                msg = self.c.recv(6000)
+                msg = self.sock.recv(6000)
                 
                 if len(msg) == 0:
                     continue
@@ -83,18 +77,30 @@ class Device:
                     with open(file_name, 'ab') as file:
                         file.write(msg)
             except socket.timeout as err:
-                logging.error("Socket timed out: " + err)
+                # socket timeout is normal
+                pass
+                #logging.error("Socket timed out: ")
+                #logging.error(err)
+            except OSError as err:
+                if err.errno == 10038 and self.shutdown.is_set(): # socket is not a socket (anymore)
+                    # recv() throws if socket is closed, that is normal during a shutdown
+                    pass
+                else:
+                    logging.error("Unexpected socket error:")
+                    logging.error(err)
+
             except Exception as err:
-                logging.error("ERRRRROROORRORORR")
+                logging.error("Unknown socket exception:")
+                logging.error(type(err).__name__)
                 logging.error(err)
 
         return False
     
     def close(self):
-        logging.info("Shut device")
+        logging.info("Shutting down device...")
         #self.ntripSocket.close()
         self.shutdown.set()
-        self.c.close()
+        self.sock.close()
 
     def identify(self, timeout=10):
 
@@ -121,6 +127,11 @@ class Device:
         
         epoch = [0, 0]
         buffer = []
+
+        timeStr = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        file_name = localconfig.basePath + "/{}/{}_{}.UBX".format(self.id, self.id, timeStr)
+        logging.info("Dump file: " + file_name)
+
         for msg in self.parser.readQueue(shutFunc=self.shutdown.is_set):
             #if self.shutdown.is_set():
             #    break
@@ -150,9 +161,12 @@ class Device:
                     TOD = epoch[1]%86400
                     hour = int(TOD/3600)
 
+                    
+
                     if self.id == None:
                         continue
-                    file_name = localconfig.basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
+                    #file_name = localconfig.basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
+                    
                     #print(file_name)
                     #print(len(buffer))
 

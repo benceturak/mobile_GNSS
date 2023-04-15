@@ -1,10 +1,10 @@
 wireless = {
-    "SSID": "EzenSincsNet",
-    "PW": "Intelligensf1ngomvan"
+    "SSID": "",
+    "PW": ""
     }
 server = {
-    "IP": "192.168.0.45",
-    "port": 50000
+    "IP": "",
+    "port": 0
 }
-importRoot = "d:/BME/_ur/2/proj"
-basePath = "d:/BME/_ur/2/proj/dump/"
+importRoot = "" # point to the folder containing mobile_GNSS and UBXparser
+basePath = "" # point to a folder to dump message files to

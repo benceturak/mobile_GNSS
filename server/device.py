@@ -1,20 +1,31 @@
+import sys
+import os
+# put UBXParser root next to mobile_GNSS root for this to work
+sys.path.append(os.path.dirname(sys.path[0]))
+from common import util
+from common import config
+from common import localconfig
+sys.path.append(os.path.join(localconfig.importRoot, 'UBXparser', 'src'))
+#sys.path.append(localconfig.importRoot)
+#from UBXParser.src import UBXParser
+from UBXparser import UBXparser
+import UBXmessage
 import socket
 import queue
 import _thread
-import sys
-sys.path.append("/home/bence/data/UBXparser/src")
-from UBXparser import UBXparser
-import UBXmessage
 import logging
+import datetime
 from datetime import datetime
+
 import time
+
 class Device:
 
-    def __init__(self, c):
+    def __init__(self, sock):
         self.id = None
         self.identifyStatus = 0
-        self.c = c
-        self.c.settimeout(4)
+        self.sock = sock
+        self.sock.settimeout(4)
         self.logger = None
 
 
@@ -36,60 +47,60 @@ class Device:
     def sendNtrip(self):
         while True:
 
-            self.c.sendall(self.ntripSocket.recv(1024))
+            self.sock.sendall(self.ntripSocket.recv(1024))
 
     def msgTimeout(self, timeout=10):
         while True:
-
-            logging.info(datetime.timestamp(datetime.now()) - self.lastMsgTime)
             if (datetime.timestamp(datetime.now()) - self.lastMsgTime) > timeout:
+                logging.warning("Timeout on TCP stream! Device shuts down")
                 self.shutdown.set()
                 break
             time.sleep(1)
 
-        logging.warning("Timeout on TCP stream! Device shuts down")
-
-
-
     def getMsg(self, saveRaw=False):
 
-        while True:
-            if self.shutdown.is_set():
-                break
+        while not self.shutdown.is_set():
             try:
-                logging.info("RECV")
-                msg = self.c.recv(6000)
-                logging.info("AAAAAAAAAAAAAAa")
-                logging.info(len(msg))
+                logging.debug("RECV")
+                msg = self.sock.recv(6000)
+                
                 if len(msg) == 0:
                     continue
+
                 self.lastMsgTime = datetime.timestamp(datetime.now())
-                logging.info("Last message time" + str(self.lastMsgTime))
-                #self.c.send(b'received\r\n')
+                logging.debug("Received {} bytes".format(len(msg)))
                 self.buffer.put(msg)
+                
+                if saveRaw:
+                    dt = datetime.utcnow()
+                    file_name = localconfig.basePath + "RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
+                    with open(file_name, 'ab') as file:
+                        file.write(msg)
             except socket.timeout as err:
-                logging.error("DSGFSRGTHS")
-                logging.error(err)
+                # socket timeout is normal
+                pass
+                #logging.error("Socket timed out: ")
+                #logging.error(err)
+            except OSError as err:
+                if err.errno == 10038 and self.shutdown.is_set(): # socket is not a socket (anymore)
+                    # recv() throws if socket is closed, that is normal during a shutdown
+                    pass
+                else:
+                    logging.error("Unexpected socket error:")
+                    logging.error(err)
+
             except Exception as err:
-                logging.error("ERRRRROROORRORORR")
+                logging.error("Unknown socket exception:")
+                logging.error(type(err).__name__)
                 logging.error(err)
-            
-            
-
-            if saveRaw:
-                dt = datetime.utcnow()
-                file_name = "/home/bence/data/nmea_server/RAW/RAW.UBX".format(dt.year, dt.month, dt.day, dt.hour)
-                with open(file_name, 'ab') as file:
-                    file.write(msg)
-            
-
 
         return False
+    
     def close(self):
-        logging.info("Shut device")
+        logging.info("Shutting down device...")
         #self.ntripSocket.close()
         self.shutdown.set()
-        self.c.close()
+        self.sock.close()
 
     def identify(self, timeout=10):
 
@@ -111,14 +122,16 @@ class Device:
 
         return False
 
-    
-            
-
     def startParser(self):
         file_name = None
         
         epoch = [0, 0]
         buffer = []
+
+        timeStr = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        file_name = localconfig.basePath + "/{}/{}_{}.UBX".format(self.id, self.id, timeStr)
+        logging.info("Dump file: " + file_name)
+
         for msg in self.parser.readQueue(shutFunc=self.shutdown.is_set):
             #if self.shutdown.is_set():
             #    break
@@ -148,9 +161,12 @@ class Device:
                     TOD = epoch[1]%86400
                     hour = int(TOD/3600)
 
+                    
+
                     if self.id == None:
                         continue
-                    file_name = "/home/bence/data/nmea_server/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
+                    #file_name = localconfig.basePath + "/{0:4s}/{0:4s}_{1:04d}{2:1d}_{3:02d}.UBX".format(self.id, epoch[0], day, hour)
+                    
                     #print(file_name)
                     #print(len(buffer))
 

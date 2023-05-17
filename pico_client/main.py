@@ -224,14 +224,14 @@ async def queue2tcp(wifi):
 
                     if binLen < endIndex:
                         print("Awaiting message of length {}B, but so far only {}B received, waiting...".format(endIndex - startIndex, binLen - startIndex))
-                        continue
+                        break
 
                     #print("Found complete message in queue")
                     msg = bin[startIndex:endIndex]
                     cs = msg[6+msgLen:6+msgLen+2]
 
-                    if cs != util.checksum(msg[2:6+msgLen]):
-                        print("Invalid checksum: {} instead of {}".format(util.bytesToHexStr(msg[msgLen-2:msgLen]), util.bytesToHexStr(util.checksum(msg[2:6+msgLen]))))
+                    #if cs != util.checksum(msg[2:6+msgLen]):
+                        #print("Invalid checksum: {} instead of {}".format(util.bytesToHexStr(msg[msgLen-2:msgLen]), util.bytesToHexStr(util.checksum(msg[2:6+msgLen]))))
                         #continue
 
                     #print("Sending message via TCP...")

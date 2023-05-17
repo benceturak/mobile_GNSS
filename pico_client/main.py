@@ -157,6 +157,26 @@ async def queue2tcp(wifi):
                             print("Exception while writing TCP:")
                             print(err)
                             break
+
+                    # hacky-macky
+                    print("Connecting to NTRIP...")
+            
+                    params = []
+                    params.append(("User-Agent", "NTRIP-agent"))
+                    params.append(("Authorization", config.ntrip["auth"]))
+                    
+                    ntripReader, ntripWriter = await asyncio.open_connection(config.ntrip["IP"], config.ntrip["port"])
+                    msg = "GET /{1:s} HTTP/1.0\r\nHost: {0:s}\r\n".format(config.ntrip["IP"], "BUTE0")
+                    for p in params:
+                        msg += p[0] + ": " + p[1] + "\r\n"
+                    msg += "\r\n"
+                        
+                    ntripWriter.write(bytes(msg, "utf8"))
+                    await ntripWriter.drain()
+                    print("Awaiting NTRIP reply...")
+                    await ntripReader.read(100) # skip \r\n\r\n
+                    print("NTRIP connection is UP...")
+
                 else:
                     tcpLed.high()
 
@@ -185,6 +205,11 @@ async def queue2tcp(wifi):
                     continue
 
                 # === END OF CONNECTION HANDLING ===
+
+                # read ntrip hacky-macky
+                ntripData = await ntripReader.read(2000)
+                swriter.write(ntripData)
+                await swriter.drain()
                 
                 # do the real work
                 try:
@@ -315,7 +340,7 @@ async def main():
     wlan.active(True)
     wifi = asyncio.create_task(connectWifi(wlan))
 
-    ntrip = asyncio.create_task(startNtrip(wlan))
+    #ntrip = asyncio.create_task(startNtrip(wlan))
     #stream = asyncio.create_task(ublox2tcp(wlan))
 
     stream = asyncio.create_task(ublox2queue())

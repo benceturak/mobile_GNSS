@@ -18,6 +18,8 @@ status_wifi=0
 status_tcp=0
 pream = b'\xb5\x62'
 
+maxMissedHeartbeatCnt = config.maxLostConnectionTime / config.heartbeatInterval
+
 powerLed = machine.Pin(config.ledPin1, machine.Pin.OUT)
 wifiLed = machine.Pin(config.ledPin2, machine.Pin.OUT)
 tcpLed = machine.Pin(config.ledPin3, machine.Pin.OUT)
@@ -101,6 +103,7 @@ async def queue2tcp(wifi):
     bin = b''
     retryCnt = 0
     failedMsgCnt = 0
+    missedHeartbeatCnt = 0
     connected = False
     while run:
         try:
@@ -140,6 +143,7 @@ async def queue2tcp(wifi):
                             if ack == b'OK':
                                 print("TCP handshake completed, connection is UP")
                                 retryCnt = 0
+                                missedHeartbeatCnt = 0
                                 id_msg = identifycation(ID)
                                 tcpWriter.write(id_msg)
                                 tcpWriter.drain()
@@ -158,32 +162,20 @@ async def queue2tcp(wifi):
                             print(err)
                             break
 
-                    # hacky-macky
-                    print("Connecting to NTRIP...")
-            
-                    params = []
-                    params.append(("User-Agent", "NTRIP-agent"))
-                    params.append(("Authorization", config.ntrip["auth"]))
-                    
-                    ntripReader, ntripWriter = await asyncio.open_connection(config.ntrip["IP"], config.ntrip["port"])
-                    msg = "GET /{1:s} HTTP/1.0\r\nHost: {0:s}\r\n".format(config.ntrip["IP"], "BUTE0")
-                    for p in params:
-                        msg += p[0] + ": " + p[1] + "\r\n"
-                    msg += "\r\n"
-                        
-                    ntripWriter.write(bytes(msg, "utf8"))
-                    await ntripWriter.drain()
-                    print("Awaiting NTRIP reply...")
-                    await ntripReader.read(100) # skip \r\n\r\n
-                    print("NTRIP connection is UP...")
-
                 else:
                     tcpLed.high()
 
                 # detect connection loss
                 try:
-                    await asyncio.wait_for(tcpReader.read(2), timeout=0.1)
+                    resp = await asyncio.wait_for(tcpReader.read(1), timeout=config.heartbeatInterval)
+                    # if read didn't time out, we (presumably) received heartbeat
+                    if resp == config.heartbeatMsg:
+                        missedHeartbeatCnt = 0
+                    else:
+                        missedHeartbeatCnt += 1
                 except asyncio.TimeoutError:
+                    missedHeartbeatCnt += 1
+                    print("Missed heartbeat #" + str(missedHeartbeatCnt))
                     pass
                 except OSError as err:
                     if err.errno == 104 or err.errno == 103: # ECONNRESET || ECONNABORTED
@@ -204,12 +196,18 @@ async def queue2tcp(wifi):
                     print(err)
                     continue
 
-                # === END OF CONNECTION HANDLING ===
+                if missedHeartbeatCnt > maxMissedHeartbeatCnt:
+                    print("Lost server hearbeat, reconnecting...")
+                    connected = False
 
-                # read ntrip hacky-macky
-                ntripData = await ntripReader.read(2000)
-                swriter.write(ntripData)
-                await swriter.drain()
+                    tcpReader.close()
+                    tcpWriter.close()
+                    await tcpReader.wait_closed()
+                    await tcpWriter.wait_closed()
+                    continue
+
+
+                # === END OF CONNECTION HANDLING ===
                 
                 # do the real work
                 try:
@@ -253,7 +251,7 @@ async def queue2tcp(wifi):
 
                     #print("Found complete message in queue")
                     msg = bin[startIndex:endIndex]
-                    cs = msg[6+msgLen:6+msgLen+2]
+                    #cs = msg[6+msgLen:6+msgLen+2]
 
                     #if cs != util.checksum(msg[2:6+msgLen]):
                         #print("Invalid checksum: {} instead of {}".format(util.bytesToHexStr(msg[msgLen-2:msgLen]), util.bytesToHexStr(util.checksum(msg[2:6+msgLen]))))

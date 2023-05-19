@@ -25,8 +25,10 @@ def on_new_client(addr, dev):
     dev.addShutdownEvent(shutDevice)
     stream2queue = threading.Thread(target=dev.getMsg, args=(True, ))
     stream2queue.start()
-    msgTimeout = threading.Thread(target=dev.msgTimeout, args=(config.tcpTimeout, ))
-    msgTimeout.start()
+    #msgTimeout = threading.Thread(target=dev.msgTimeout, args=(config.tcpTimeout, ))
+    #msgTimeout.start()
+    watchdog = threading.Thread(target=dev.tcpWatchdog, args=())
+    watchdog.start()
 
     if dev.identify():
         dev.startParser()
@@ -36,6 +38,7 @@ def on_new_client(addr, dev):
 
     logging.info("Shutting down buffer queue...")
     stream2queue.join()
+    watchdog.join()
     
     #logging.info("Shutting down TCP watchdog...")
     #msgTimeout.join()

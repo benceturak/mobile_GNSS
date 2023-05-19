@@ -57,6 +57,14 @@ class Device:
                 break
             time.sleep(1)
 
+    def tcpWatchdog(self):
+        while not self.shutdown.is_set():
+            try:
+                self.sock.send(config.heartbeatMsg)
+            except Exception as err:
+                logging.error("Error while trying to send heartbeat: {}".format(err))
+            time.sleep(config.heartbeatInterval)
+            
     def getMsg(self, saveRaw=False):
 
         while not self.shutdown.is_set():
@@ -85,6 +93,9 @@ class Device:
                 if err.errno == 10038 and self.shutdown.is_set(): # socket is not a socket (anymore)
                     # recv() throws if socket is closed, that is normal during a shutdown
                     pass
+                elif err.errno == 10053 or err.errno == 10054:
+                    logging.warning("Connection was actively closed")
+                    self.close()
                 else:
                     logging.error("Unexpected socket error:")
                     logging.error(err)

@@ -7,6 +7,11 @@ ntrip = {
 wifiReconnectTimeout = 10 # [s]   Time to wait after a WiFi connection attempt for a connection before re-establishing
 tcpRetryDelay = 5000      # [ms]  Time to wait inbetween TCP connection attempts
 maxFailedMsgCnt = 5       # [1]   Number of failed TCP messages requred to assume TCP connection is down
+
+heartbeatMsg = b'\x42'    #       Payload of server->client heartbeat messages
+heartbeatInterval = 1     # [s]   Time between server->client heartbeats
+maxLostConnectionTime = 3 # [s]   Max time without heartbeats until we assume TCP connection is down
+
 uartBaudRate = 38400      # [b/s] Baud rate of the UART connection to/from uBlox
 ledPin1 = 18
 ledPin2 = 19

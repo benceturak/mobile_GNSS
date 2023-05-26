@@ -74,7 +74,7 @@ async def listen():
         while run:
             try:
                 sock, addr = serv.accept()
-                print("Incoming connection, sending ACK...")
+                print("Incoming connection {}, sending ACK...".format(sock.getsockname()))
                 # send useless return msg as aysncio socket doesn't know if TCP handshake was actually done, always returns OK
                 sock.send(b'OK')
                 dev = Device(sock)

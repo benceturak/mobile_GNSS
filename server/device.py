@@ -61,8 +61,13 @@ class Device:
         while not self.shutdown.is_set():
             try:
                 self.sock.send(config.heartbeatMsg)
+                logging.info("Sent heartbeat: {}".format(self.sock.getsockname()))
             except Exception as err:
-                logging.error("Error while trying to send heartbeat: {}".format(err))
+                if err.errno == 32:
+                    logging.error("TCP connection broken")
+                    self.close()
+                else:
+                    logging.error("Error while trying to send heartbeat: {}".format(err))
             time.sleep(config.heartbeatInterval)
             
     def getMsg(self, saveRaw=False):
